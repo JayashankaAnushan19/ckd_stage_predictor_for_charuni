@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CKD Stage Predictor</title>
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        font-family: Arial, sans-serif;
+        background: #f4f7f9;
+    }
+    h1 {
+        text-align: center;
+        color: #333;
+        margin-top: 20px;
+    }
+    .container {
+        display: flex;
+        max-width: 90%;
+        margin: 20px auto;
+        background: #fff;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        border-radius: 10px;
+        overflow: hidden;
+        height: 100%;
+        font-size: 16px;
+    }
+    .left, .right {
+        padding: 30px;
+        overflow-y: auto;
+    }
+    .left { width: 45%; background: #f9fafd; border-right: 1px solid #ddd; }
+    .right { width: 55%; background: #ffffff; }
+    .input-box { margin-bottom: 15px; }
+    label { display: block; font-weight: bold; margin-bottom: 6px; color: #333; }
+    input, select { width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; }
+    button {
+        margin-top: 20px;
+        padding: 12px;
+        width: 100%;
+        background: #4CAF50;
+        color: #fff;
+        font-size: 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+    button:hover { background: #45a049; }
+    #result { margin-top: 20px; display: none; }
+    .kidney-level { margin-bottom: 20px; padding: 15px; background: #e8f4ff; border-left: 5px solid #1e90ff; font-size: 16px; }
+    .bar-container { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+    .stage-block { flex: 1; margin: 0 5px; height: 30px; background: #ddd; border-radius: 5px; position: relative; transition: 0.3s; }
+    .stage-block.active { background: #1e90ff; }
+    .stage-label { position: absolute; width: 100%; text-align: center; top: 50%; transform: translateY(-50%); font-weight: bold; color: white; }
+    #speedometer { width: 100%; height: 300px; margin-top: 50px; }
+    .gauge-text { font-size: 16px; text-anchor: middle; fill: #333; font-weight: 600; user-select: none; }
+    .stage-range-label { font-size: 14px; fill: #fff; text-anchor: middle; font-weight: bold; user-select: none; text-shadow: 0 0 2px rgba(0,0,0,0.5); }
+</style>
+</head>
+<body>
+
+<h1>CKD Stage Predictor</h1>
+
+<div class="container">
+    <div class="left">
+        <div class="input-box"><label>Patient ID</label><input id="Patient_ID" type="text" placeholder="Enter Patient ID" /></div>
+        <div class="input-box"><label>Patient Name</label><input id="Patient_Name" type="text" placeholder="Enter Patient Name" /></div>
+        <div class="input-box"><label>Age</label><input id="Age" type="number" /></div>
+        <div class="input-box"><label>Gender</label><select id="Gender"><option>Male</option><option>Female</option></select></div>
+        <div class="input-box"><label>Height</label><input id="Height" type="number" /></div>
+        <div class="input-box"><label>BMI</label><input id="BMI" type="number" /></div>
+        <div class="input-box"><label>Weight</label><input id="Weight" type="number" /></div>
+        <div class="input-box"><label>Region</label><select id="Region"><option>Urban</option><option>Rural</option><option>Semi-urban</option></select></div>
+        <div class="input-box"><label>Diabetes</label><select id="Diabetes"><option>Yes</option><option>No</option></select></div>
+        <div class="input-box"><label>eGFR</label><input id="eGFR" type="number" step="0.1" /></div>
+        <div class="input-box"><label>Albuminuria Level</label><input id="Albuminuria_Level" type="number" step="0.1" /></div>
+        <div class="input-box"><label>Hypertension</label><select id="Hypertension"><option>Yes</option><option>No</option></select></div>
+        <button onclick="sendPrediction()">Predict CKD Stage</button>
+    </div>
+
+    <div class="right">
+        <div id="result">
+            <div class="kidney-level">
+                <span class="stage-title">CKD Risk Percentage:</span> <span id="ckdRisk"></span>%
+            </div>
+            <div class="kidney-level">
+                <span class="stage-title">Predicted CKD Stage:</span> <span id="predictedStage"></span>
+            </div>
+            <div class="kidney-level">
+                <span class="stage-title">Kidney Function Level:</span> <span id="kidneyLevel"></span>
+            </div>
+            <div class="bar-container">
+                <div class="stage-block" id="stage1"><span class="stage-label">1</span></div>
+                <div class="stage-block" id="stage2"><span class="stage-label">2</span></div>
+                <div class="stage-block" id="stage3a"><span class="stage-label">3A</span></div>
+                <div class="stage-block" id="stage3b"><span class="stage-label">3B</span></div>
+                <div class="stage-block" id="stage4"><span class="stage-label">4</span></div>
+                <div class="stage-block" id="stage5"><span class="stage-label">5</span></div>
+            </div>
+            <svg id="speedometer"></svg>
+        </div>
+    </div>
+</div>
+
+<script>
+const STAGE_RISK_MAP = {
+    "Stage 1": 10.0,
+    "Stage 2": 25.0,
+    "Stage 3a": 45.0,
+    "Stage 3b": 65.0,
+    "Stage 4": 85.0,
+    "Stage 5": 95.0
+};
+
+function kidneyFunctionPercent(eGFR){
+    let capped = Math.max(0, Math.min(parseFloat(eGFR), 120));
+    return capped.toFixed(1);
+}
+
+function getKidneyLevel(eGFR){
+    const percent = kidneyFunctionPercent(eGFR);
+    if(eGFR >= 90) return `${percent}% - Kidney damage with normal or GFR`;
+    if(eGFR >= 60) return `${percent}% - Kidney damage with mild GFR`;
+    if(eGFR >= 45) return `${percent}% - Mild to moderate GFR`;
+    if(eGFR >= 30) return `${percent}% - Moderate GFR`;
+    if(eGFR >= 15) return `${percent}% - Severe GFR`;
+    return `${percent}% - Kidney failure`;
+
+    // const percent = kidneyFunctionPercent(eGFR);
+    // if(eGFR >= 90) return `${percent}% - Stage 1: Kidney damage with normal or GFR`;
+    // if(eGFR >= 60) return `${percent}% - Stage 2: Kidney damage with mild GFR`;
+    // if(eGFR >= 45) return `${percent}% - Stage 3A: Mild to moderate GFR`;
+    // if(eGFR >= 30) return `${percent}% - Stage 3B: Moderate GFR`;
+    // if(eGFR >= 15) return `${percent}% - Stage 4: Severe GFR`;
+    // return `${percent}% - Stage 5: Kidney failure (< 15 or dialysis)`;
+}
+
+function highlightStage(stage){
+    if(!stage) return;
+    stage = stage.replace(/stage\s*/i,'').replace(/\s+/g,'').toUpperCase();
+    const stages = ["stage1","stage2","stage3a","stage3b","stage4","stage5"];
+    stages.forEach(s => document.getElementById(s).classList.remove("active"));
+    const idMap = {"1":"stage1","2":"stage2","3A":"stage3a","3B":"stage3b","4":"stage4","5":"stage5"};
+    if(stage in idMap) document.getElementById(idMap[stage]).classList.add("active");
+}
+
+function drawSpeedometer(eGFR){
+    const svg = document.getElementById("speedometer");
+    svg.innerHTML="";
+    const width=svg.clientWidth||600;
+    const height=svg.clientHeight||300;
+    const cx=width/2, cy=height*0.9;
+    const radius=Math.min(width/2-40,height-80);
+    const stages=[
+        {label:"1", min:90, max:120, color:"#00cc00"},
+        {label:"2", min:60, max:89, color:"#ccff00"},
+        {label:"3A", min:45, max:59, color:"#ffcc00"},
+        {label:"3B", min:30, max:44, color:"#ff6600"},
+        {label:"4", min:15, max:29, color:"#ff3300"},
+        {label:"5", min:0, max:14, color:"#cc0000"}
+    ];
+    stages.forEach(stage=>{
+        let startAngle=Math.PI*(1-Math.min(stage.max,120)/120);
+        let endAngle=Math.PI*(1-Math.min(stage.min,120)/120);
+        const x1=cx+radius*Math.cos(startAngle);
+        const y1=cy-radius*Math.sin(startAngle);
+        const x2=cx+radius*Math.cos(endAngle);
+        const y2=cy-radius*Math.sin(endAngle);
+        const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+        path.setAttribute("d",`M${cx},${cy} L${x1},${y1} A${radius},${radius} 0 0 0 ${x2},${y2} Z`);
+        path.setAttribute("fill",stage.color); path.setAttribute("opacity","0.85");
+        svg.appendChild(path);
+        const angleLabel=(startAngle+endAngle)/2;
+        const labelRadius=radius-30;
+        const xl=cx+labelRadius*Math.cos(angleLabel);
+        const yl=cy-labelRadius*Math.sin(angleLabel);
+        const text=document.createElementNS("http://www.w3.org/2000/svg","text");
+        text.setAttribute("x",xl); text.setAttribute("y",yl+6); text.setAttribute("class","stage-range-label"); text.textContent=stage.label;
+        svg.appendChild(text);
+    });
+
+    // eGFR numeric labels
+    const markerRadius=radius+20;
+    for(let t=0;t<=120;t+=20){
+        const a=Math.PI*(1-t/120);
+        const x=cx+markerRadius*Math.cos(a);
+        const y=cy-markerRadius*Math.sin(a);
+        const rotation=-(a*180/Math.PI-90);
+        const text=document.createElementNS("http://www.w3.org/2000/svg","text");
+        text.setAttribute("x",x); text.setAttribute("y",y+5); text.setAttribute("class","gauge-text"); text.setAttribute("transform",`rotate(${rotation}, ${x}, ${y+5})`);
+        text.textContent=t;
+        svg.appendChild(text);
+    }
+
+    const angle=Math.PI*(1-Math.min(Math.max(eGFR,0),120)/120);
+    const arrowLength=radius*0.85;
+    const pivotRadius=20;
+    const pivot=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    pivot.setAttribute("cx",cx); pivot.setAttribute("cy",cy); pivot.setAttribute("r",pivotRadius); pivot.setAttribute("fill","#222");
+    svg.appendChild(pivot);
+
+    const xArrow=cx+arrowLength*Math.cos(angle); const yArrow=cy-arrowLength*Math.sin(angle);
+    const headWidth=14;
+    const baseX=cx+pivotRadius*Math.cos(angle); const baseY=cy-pivotRadius*Math.sin(angle);
+    const leftX=baseX+headWidth*Math.cos(angle-Math.PI/2); const leftY=baseY-headWidth*Math.sin(angle-Math.PI/2);
+    const rightX=baseX+headWidth*Math.cos(angle+Math.PI/2); const rightY=baseY-headWidth*Math.sin(angle+Math.PI/2);
+    const arrowHead=document.createElementNS("http://www.w3.org/2000/svg","polygon");
+    arrowHead.setAttribute("points",`${xArrow},${yArrow} ${leftX},${leftY} ${rightX},${rightY}`); arrowHead.setAttribute("fill","#222");
+    svg.appendChild(arrowHead);
+
+    const valText=document.createElementNS("http://www.w3.org/2000/svg","text");
+    valText.setAttribute("x",cx); valText.setAttribute("y",cy-radius*0.5); valText.setAttribute("class","gauge-text"); valText.setAttribute("font-size","20");
+    valText.setAttribute("font-weight","bold"); valText.textContent=`eGFR: ${eGFR.toFixed(1)}`;
+    svg.appendChild(valText);
+}
+
+async function sendPrediction(){
+    const eGFR=parseFloat(document.getElementById("eGFR").value);
+    document.getElementById("kidneyLevel").innerText=getKidneyLevel(eGFR);
+
+    const data={
+        Patient_ID:document.getElementById("Patient_ID").value,
+        Age:parseInt(document.getElementById("Age").value),
+        Gender:document.getElementById("Gender").value,
+        eGFR:eGFR,
+        Albuminuria_Level:parseFloat(document.getElementById("Albuminuria_Level").value),
+        Diabetes:document.getElementById("Diabetes").value==="Yes"?1:0,
+        Hypertension:document.getElementById("Hypertension").value==="Yes"?1:0,
+        Region:document.getElementById("Region").value
+    };
+
+    const res=await fetch("/predict",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(data)
+    });
+    const result=await res.json();
+    const stage=result.prediction;
+    document.getElementById("result").style.display="block";
+    document.getElementById("predictedStage").innerText=stage;
+    highlightStage(stage);
+
+    // CKD Risk
+    const risk = STAGE_RISK_MAP[stage]||0;
+    document.getElementById("ckdRisk").innerText=risk;
+
+    drawSpeedometer(eGFR);
+}
+</script>
+
+</body>
+</html>
