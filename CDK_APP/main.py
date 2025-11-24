@@ -5,6 +5,7 @@ import joblib
 import pandas as pd
 import uvicorn
 import os
+from fastapi.staticfiles import StaticFiles
 
 # ---------------------------------------------------
 # Load model + encoder
@@ -14,6 +15,7 @@ ENCODER_PATH = "models/label_encoder.joblib"
 
 model = joblib.load(MODEL_PATH)
 label_encoder = joblib.load(ENCODER_PATH)
+
 
 # ---------------------------------------------------
 # Create API
