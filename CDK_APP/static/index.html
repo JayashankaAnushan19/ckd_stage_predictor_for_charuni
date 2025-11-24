@@ -175,23 +175,23 @@
 
     <!-- Stage Images -->
     <div class="metric-row-6f">
-      <div class="card"><img src="../images/stage1.png" alt="Stage 1"></div>
-      <div class="card"><img src="../images/stage2.png" alt="Stage 2"></div>
-      <div class="card"><img src="../images/stage3a.png" alt="Stage 3a"></div>
-      <div class="card"><img src="../images/stage3b.png" alt="Stage 3b"></div>
-      <div class="card"><img src="../images/stage4.png" alt="Stage 4"></div>
-      <div class="card" id="activeStageCard"><img src="../images/stage5.png" alt="Stage 5"></div>
+      <div class="card"><img src="/static/images/stage1.png" alt="Stage 1"></div>
+      <div class="card"><img src="/static/images/stage2.png" alt="Stage 2"></div>
+      <div class="card"><img src="/static/images/stage3a.png" alt="Stage 3a"></div>
+      <div class="card"><img src="/static/images/stage3b.png" alt="Stage 3b"></div>
+      <div class="card"><img src="/static/images/stage4.png" alt="Stage 4"></div>
+      <div class="card"><img src="/static/images/stage5.png" alt="Stage 5"></div>
     </div>
 
     <!-- Gauges -->
     <div class="metric-row-2f">
       <div class="card">
         <h3>eGFR</h3>
-        <canvas id="gfrGauge"></canvas>
+        <svg id="gfrGauge" width="100%" height="300"></svg>
       </div>
       <div class="card">
         <h3>Albuminuria Level</h3>
-        <canvas id="acrGauge"></canvas>
+        <svg id="acrGauge" width="100%" height="300"></svg>
       </div>
     </div>
 
@@ -222,45 +222,146 @@ function calculateBMI(height_cm, weight_kg) {
 }
 
 // Draw Gauge
-function drawGauge(canvasId, value, maxValue) {
-  const canvas = document.getElementById(canvasId);
-  const ctx = canvas.getContext("2d");
-  canvas.width = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
-  const w = canvas.width;
-  const h = canvas.height;
-  const radius = Math.min(w, h)/2;
+function drawSpeedometer_grf(canvasId, value, maxValue){
+    const svg = document.getElementById(canvasId);
+    svg.innerHTML="";
+    const width=svg.clientWidth||600;
+    const height=svg.clientHeight||300;
+    const cx=width/2, cy=height*0.9;
+    const radius=Math.min(width/2-40,height-80);
+    
+    const stages=[
+        {label:"", min:90, max:120, color:"#00cc00"},
+        {label:"", min:60, max:89, color:"#ccff00"},
+        {label:"", min:45, max:59, color:"#ffcc00"},
+        {label:"", min:30, max:44, color:"#ff6600"},
+        {label:"", min:15, max:29, color:"#ff3300"},
+        {label:"", min:0, max:14, color:"#cc0000"}
+    ];
 
-  ctx.clearRect(0, 0, w, h);
+    stages.forEach(stage=>{
+        let startAngle=Math.PI*(1-Math.min(stage.max,maxValue)/maxValue);
+        let endAngle=Math.PI*(1-Math.min(stage.min,maxValue)/maxValue);
+        const x1=cx+radius*Math.cos(startAngle);
+        const y1=cy-radius*Math.sin(startAngle);
+        const x2=cx+radius*Math.cos(endAngle);
+        const y2=cy-radius*Math.sin(endAngle);
+        const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+        path.setAttribute("d",`M${cx},${cy} L${x1},${y1} A${radius},${radius} 0 0 0 ${x2},${y2} Z`);
+        path.setAttribute("fill",stage.color); path.setAttribute("opacity","0.85");
+        svg.appendChild(path);
+        const angleLabel=(startAngle+endAngle)/2;
+        const labelRadius=radius-30;
+        const xl=cx+labelRadius*Math.cos(angleLabel);
+        const yl=cy-labelRadius*Math.sin(angleLabel);
+        const text=document.createElementNS("http://www.w3.org/2000/svg","text");
+        text.setAttribute("x",xl); text.setAttribute("y",yl+6); text.setAttribute("class","stage-range-label"); text.textContent=stage.label;
+        svg.appendChild(text);
+    });
 
-  // Background arc
-  ctx.beginPath();
-  ctx.lineWidth = 15;
-  ctx.strokeStyle = "#ddd";
-  ctx.arc(w/2, h, radius, Math.PI, 0);
-  ctx.stroke();
+    const markerRadius=radius+20;
+    for(let t=0;t<=maxValue;t+=Math.round(maxValue/6)){
+        const a=Math.PI*(1-t/maxValue);
+        const x=cx+markerRadius*Math.cos(a);
+        const y=cy-markerRadius*Math.sin(a);
+        const rotation=-(a*180/Math.PI-90);
+        const text=document.createElementNS("http://www.w3.org/2000/svg","text");
+        text.setAttribute("x",x); text.setAttribute("y",y+5); text.setAttribute("class","gauge-text"); text.setAttribute("transform",`rotate(${rotation}, ${x}, ${y+5})`);
+        text.textContent=t;
+        svg.appendChild(text);
+    }
 
-  // Determine color based on value
-  let strokeColor = "#111";
-  if(canvasId==="gfrGauge"){
-    strokeColor = value<=15?"red":value<=60?"orange":"green";
-  } else if(canvasId==="acrGauge"){
-    strokeColor = value<=30?"green":value<=300?"orange":"red";
-  }
+    const angle=Math.PI*(1-Math.min(Math.max(value,0),maxValue)/maxValue);
+    const arrowLength=radius*0.85;
+    const pivotRadius=20;
+    const pivot=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    pivot.setAttribute("cx",cx); pivot.setAttribute("cy",cy); pivot.setAttribute("r",pivotRadius); pivot.setAttribute("fill","#222");
+    svg.appendChild(pivot);
 
-  ctx.beginPath();
-  ctx.strokeStyle = strokeColor;
-  ctx.arc(w/2, h, radius, Math.PI, Math.PI + Math.PI*(value/maxValue));
-  ctx.stroke();
+    const xArrow=cx+arrowLength*Math.cos(angle); const yArrow=cy-arrowLength*Math.sin(angle);
+    const headWidth=14;
+    const baseX=cx+pivotRadius*Math.cos(angle); const baseY=cy-pivotRadius*Math.sin(angle);
+    const leftX=baseX+headWidth*Math.cos(angle-Math.PI/2); const leftY=baseY-headWidth*Math.sin(angle-Math.PI/2);
+    const rightX=baseX+headWidth*Math.cos(angle+Math.PI/2); const rightY=baseY-headWidth*Math.sin(angle+Math.PI/2);
+    const arrowHead=document.createElementNS("http://www.w3.org/2000/svg","polygon");
+    arrowHead.setAttribute("points",`${xArrow},${yArrow} ${leftX},${leftY} ${rightX},${rightY}`); arrowHead.setAttribute("fill","#222");
+    svg.appendChild(arrowHead);
 
-  // Current value
-  ctx.font="20px Arial"; ctx.fillStyle="#111"; ctx.textAlign="center";
-  ctx.fillText(value.toFixed(1), w/2, h-radius-10);
-
-  // Min/max labels
-  ctx.font="14px Arial"; ctx.fillText("0", w/2-radius, h+15);
-  ctx.fillText(maxValue, w/2+radius, h+15);
+    const valText=document.createElementNS("http://www.w3.org/2000/svg","text");
+    valText.setAttribute("x",cx); valText.setAttribute("y",cy-radius*0.5); valText.setAttribute("class","gauge-text"); valText.setAttribute("font-size","20");
+    valText.setAttribute("font-weight","bold"); valText.textContent=`${value.toFixed(1)}`;
+    svg.appendChild(valText);
 }
+
+
+function drawSpeedometer_av(canvasId, value, maxValue){
+    const svg = document.getElementById(canvasId);
+    svg.innerHTML="";
+    const width=svg.clientWidth||600;
+    const height=svg.clientHeight||300;
+    const cx=width/2, cy=height*0.9;
+    const radius=Math.min(width/2-40,height-80);
+    
+    const stages=[
+        {label:"", min:300, max:330, color:"#00cc00"},
+        {label:"", min:31, max:299, color:"#ffcc00"},
+        {label:"", min:0, max:30, color:"#cc0000"}
+    ];
+
+    stages.forEach(stage=>{
+        let startAngle=Math.PI*(1-Math.min(stage.max,maxValue)/maxValue);
+        let endAngle=Math.PI*(1-Math.min(stage.min,maxValue)/maxValue);
+        const x1=cx+radius*Math.cos(startAngle);
+        const y1=cy-radius*Math.sin(startAngle);
+        const x2=cx+radius*Math.cos(endAngle);
+        const y2=cy-radius*Math.sin(endAngle);
+        const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+        path.setAttribute("d",`M${cx},${cy} L${x1},${y1} A${radius},${radius} 0 0 0 ${x2},${y2} Z`);
+        path.setAttribute("fill",stage.color); path.setAttribute("opacity","0.85");
+        svg.appendChild(path);
+        const angleLabel=(startAngle+endAngle)/2;
+        const labelRadius=radius-30;
+        const xl=cx+labelRadius*Math.cos(angleLabel);
+        const yl=cy-labelRadius*Math.sin(angleLabel);
+        const text=document.createElementNS("http://www.w3.org/2000/svg","text");
+        text.setAttribute("x",xl); text.setAttribute("y",yl+6); text.setAttribute("class","stage-range-label"); text.textContent=stage.label;
+        svg.appendChild(text);
+    });
+
+    const markerRadius=radius+20;
+    for(let t=0;t<=maxValue;t+=Math.round(maxValue/6)){
+        const a=Math.PI*(1-t/maxValue);
+        const x=cx+markerRadius*Math.cos(a);
+        const y=cy-markerRadius*Math.sin(a);
+        const rotation=-(a*180/Math.PI-90);
+        const text=document.createElementNS("http://www.w3.org/2000/svg","text");
+        text.setAttribute("x",x); text.setAttribute("y",y+5); text.setAttribute("class","gauge-text"); text.setAttribute("transform",`rotate(${rotation}, ${x}, ${y+5})`);
+        text.textContent=t;
+        svg.appendChild(text);
+    }
+
+    const angle=Math.PI*(1-Math.min(Math.max(value,0),maxValue)/maxValue);
+    const arrowLength=radius*0.85;
+    const pivotRadius=20;
+    const pivot=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    pivot.setAttribute("cx",cx); pivot.setAttribute("cy",cy); pivot.setAttribute("r",pivotRadius); pivot.setAttribute("fill","#222");
+    svg.appendChild(pivot);
+
+    const xArrow=cx+arrowLength*Math.cos(angle); const yArrow=cy-arrowLength*Math.sin(angle);
+    const headWidth=14;
+    const baseX=cx+pivotRadius*Math.cos(angle); const baseY=cy-pivotRadius*Math.sin(angle);
+    const leftX=baseX+headWidth*Math.cos(angle-Math.PI/2); const leftY=baseY-headWidth*Math.sin(angle-Math.PI/2);
+    const rightX=baseX+headWidth*Math.cos(angle+Math.PI/2); const rightY=baseY-headWidth*Math.sin(angle+Math.PI/2);
+    const arrowHead=document.createElementNS("http://www.w3.org/2000/svg","polygon");
+    arrowHead.setAttribute("points",`${xArrow},${yArrow} ${leftX},${leftY} ${rightX},${rightY}`); arrowHead.setAttribute("fill","#222");
+    svg.appendChild(arrowHead);
+
+    const valText=document.createElementNS("http://www.w3.org/2000/svg","text");
+    valText.setAttribute("x",cx); valText.setAttribute("y",cy-radius*0.5); valText.setAttribute("class","gauge-text"); valText.setAttribute("font-size","20");
+    valText.setAttribute("font-weight","bold"); valText.textContent=`${value.toFixed(1)}`;
+    svg.appendChild(valText);
+}
+
 
 // Highlight Stage Card
 function highlightStage(stageName){
@@ -377,8 +478,10 @@ async function sendPrediction() {
     document.getElementById("acrRisk").innerText = acrComment.risk;
     document.getElementById("acrComment").innerText = acrComment.comment;
 
-    drawGauge("gfrGauge", eGFR, 120);
-    drawGauge("acrGauge", acr, 330);
+    // drawEGFRGauge("gfrGauge", eGFR);  
+    // drawACRGauge("acrGauge", acr);
+    drawSpeedometer_grf("gfrGauge", eGFR, 120);
+    drawSpeedometer_av("acrGauge", acr, 330);
     highlightStage(predictedStage);
 
   } catch (err) {
@@ -388,8 +491,8 @@ async function sendPrediction() {
     
     // Fallback UI
     document.getElementById("predicted_ckd_stage").innerText = "-1";
-    drawGauge("gfrGauge", eGFR, 120);
-    drawGauge("acrGauge", acr, 330);
+    drawSpeedometer_grf("gfrGauge", eGFR, 120);
+    drawSpeedometer_av("acrGauge", acr, 330);
     highlightStage("-1");
     ckdRiskPercentage("-1");
   }
